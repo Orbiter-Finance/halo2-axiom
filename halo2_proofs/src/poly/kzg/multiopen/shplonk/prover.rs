@@ -137,6 +137,7 @@ where
         // TODO: explore if it is safe to use same challenge
         // for different sets that are already combined with anoter challenge
         let y: ChallengeY<_> = transcript.squeeze_challenge_scalar();
+        println!("DDDDDDDDDDDDDDDDDDD============Hook!");
 
         let quotient_contribution =
             |rotation_set: &RotationSetExtension<E::G1Affine>| -> Polynomial<E::Scalar, Coeff> {
