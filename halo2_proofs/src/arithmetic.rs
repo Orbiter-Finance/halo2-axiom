@@ -1,5 +1,7 @@
 //! This module provides common utilities, traits and structures for group,
 //! field and polynomial arithmetic.
+#[cfg(feature = "profile")]
+use ark_std::{end_timer, start_timer};
 
 use super::multicore;
 pub use ff::Field;
@@ -133,6 +135,10 @@ pub fn small_multiexp<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::C
 ///
 /// This will use multithreading if beneficial.
 pub fn best_multiexp<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Curve {
+    // let profile_info= format!("multEXP====== coeffs_len {} , bases_len {}", coeffs.len(), bases.len());
+    // #[cfg(feature = "profile")]
+    // let best_multiexp_timer = start_timer!(|| profile_info);
+   
     assert_eq!(coeffs.len(), bases.len());
 
     //println!("msm: {}", coeffs.len());
@@ -168,6 +174,8 @@ pub fn best_multiexp<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Cu
     unsafe {
         MULTIEXP_TOTAL_TIME += duration;
     }
+    // #[cfg(feature = "profile")]
+    // end_timer!(best_multiexp_timer);
 
     res
 }

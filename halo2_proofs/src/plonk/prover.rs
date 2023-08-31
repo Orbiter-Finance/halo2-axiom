@@ -289,6 +289,8 @@ where
         }
 
         fn next_phase(&mut self) {
+            #[cfg(feature = "profile")]
+            let nex_phase_timer = start_timer!(|| "Circuit nex_phase MSM Computation");
             let phase = self.current_phase.to_u8() as usize;
             if phase == 0 {
                 // Absorb instances into transcript.
@@ -376,6 +378,8 @@ where
                 assert!(existing.is_none());
             }
             self.current_phase = self.current_phase.next();
+            #[cfg(feature = "profile")]
+            end_timer!(nex_phase_timer);
         }
     }
 

@@ -1,3 +1,5 @@
+#[cfg(feature = "profile")]
+use ark_std::{end_timer, start_timer};
 use std::cmp;
 use std::fmt;
 use std::marker::PhantomData;
@@ -111,7 +113,13 @@ impl<'a, F: Field, CS: Assignment<F> + 'a> Layouter<F> for SingleChipLayouter<'a
         let mut region = SingleChipLayouterRegion::new(self, 0.into()); //region_index.into());
         let result = {
             let region: &mut dyn RegionLayouter<F> = &mut region;
-            assignment(region.into())
+            #[cfg(feature = "profile")]
+            let circuit_assig_region_msm_time = start_timer!(|| "Circuit assign_region MSM computation");
+
+            let result = assignment(region.into());
+            #[cfg(feature = "profile")]
+            end_timer!(circuit_assig_region_msm_time);
+            result
         }?;
         let constants_to_assign = region.constants;
         self.cs.exit_region();
