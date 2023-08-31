@@ -2,7 +2,7 @@
 members = [
     "halo2",
     "halo2_proofs",
-#    "icicle",
+    "icicle",
     "primitives/poseidon"
 ]
 
