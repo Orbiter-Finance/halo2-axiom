@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"trait":[["Engine",""],["MillerLoopResult","Represents results of a Miller loop, one of the most expensive portions of the pairing function."],["MultiMillerLoop","An engine that can compute sums of pairings in an efficient way."],["PairingCurveAffine","Affine representation of an elliptic curve point that can be used to perform pairings."]]};

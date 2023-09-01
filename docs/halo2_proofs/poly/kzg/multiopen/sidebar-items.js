@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":[["ProverGWC","Concrete KZG prover with GWC variant"],["ProverSHPLONK","Concrete KZG prover with SHPLONK variant"],["VerifierGWC","Concrete KZG verifier with GWC variant"],["VerifierSHPLONK","Concrete KZG multiopen verifier with SHPLONK variant"]]};

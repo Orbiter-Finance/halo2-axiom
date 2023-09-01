@@ -1,1 +1,0 @@
-window.ALL_CRATES = ["halo2","halo2_proofs","halo2curves","poseidon"];

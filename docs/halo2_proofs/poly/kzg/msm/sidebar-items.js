@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":[["DualMSM","Two channel MSM accumulator"],["MSMKZG","A multiscalar multiplication in the polynomial commitment scheme"]]};
