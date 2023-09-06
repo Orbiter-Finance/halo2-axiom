@@ -11,6 +11,7 @@ use group::{
 };
 
 pub use halo2curves::{CurveAffine, CurveExt, FieldExt, Group};
+use rayon::prelude::*;
 
 /// TEMP
 pub static mut MULTIEXP_TOTAL_TIME: usize = 0;
@@ -129,6 +130,153 @@ pub fn small_multiexp<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::C
     acc
 }
 
+pub fn best_multiexp_gpu_cond<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Curve {
+    if coeffs.len() == 0 {
+        C::Curve::identity()
+    } else {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cuda")] {
+                println!("CUDA====CUDA");
+                gpu_multiexp(coeffs, bases)
+            } else {
+                best_multiexp(coeffs, bases)
+            }
+        }
+    }
+}
+
+#[cfg(feature = "cuda")]
+pub fn gpu_multiexp<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Curve {
+    gpu_multiexp_bound(coeffs, bases, C::Scalar::NUM_BITS as usize)
+}
+
+#[cfg(feature = "cuda")]
+pub fn gpu_multiexp_bound<C: CurveAffine>(
+    coeffs: &[C::Scalar],
+    bases: &[C],
+    max_bits: usize,
+) -> C::Curve {
+    use ec_gpu_gen::rust_gpu_tools::Device;
+    use std::str::FromStr;
+
+    if max_bits == 0 || coeffs.len() == 0 {
+        C::Curve::identity()
+    } else {
+        //let timer = start_timer!(|| "msm gpu");
+        let n_gpu = *crate::plonk::N_GPU;
+        let part_len = (coeffs.len() + n_gpu - 1) / n_gpu;
+
+        let c = coeffs
+            .par_chunks(part_len)
+            .zip(bases.par_chunks(part_len))
+            .map(|(c, b)| gpu_multiexp_single_gpu_with_bound(c, b, max_bits))
+            .collect::<Vec<_>>()
+            .into_iter()
+            .reduce(|acc, x| acc + x)
+            .unwrap();
+
+        //end_timer!(timer);
+        c
+    }
+}
+
+#[cfg(feature = "cuda")]
+pub fn acquire_gpu() -> usize {
+    use crate::plonk::{GPU_COND_VAR, GPU_LOCK};
+    let mut free_gpus = GPU_LOCK.lock().unwrap();
+    while free_gpus.len() == 0 {
+        free_gpus = GPU_COND_VAR.wait(free_gpus).unwrap();
+    }
+    free_gpus.pop().unwrap()
+}
+
+#[cfg(feature = "cuda")]
+pub fn release_gpu(gpu_idx: usize) {
+    use crate::plonk::{GPU_COND_VAR, GPU_LOCK};
+    {
+        let mut free_gpus = GPU_LOCK.lock().unwrap();
+        free_gpus.push(gpu_idx);
+    }
+    GPU_COND_VAR.notify_one();
+}
+
+
+#[cfg(feature = "cuda")]
+pub fn gpu_multiexp_single_gpu_with_bound<C: CurveAffine>(
+    coeffs: &[C::Scalar],
+    bases: &[C],
+    max_bits: usize,
+) -> C::Curve {
+    use crate::plonk::{GPU_COND_VAR, GPU_LOCK};
+    use ec_gpu_gen::{
+        fft::FftKernel, multiexp::SingleMultiexpKernel, rust_gpu_tools::Device, threadpool::Worker,
+    };
+    use group::Curve;
+    use halo2curves::bn256::{G1Affine, Fr};
+    // use pairing::bn256::Fr;
+
+    if max_bits == 0 {
+        C::Curve::identity()
+    } else {
+        let gpu_idx = acquire_gpu();
+
+        let _coeffs: &[Fr] = unsafe { std::mem::transmute(&coeffs[..]) };
+        let bases: &[G1Affine] = unsafe { std::mem::transmute(bases) };
+
+        let devices = Device::all();
+        let device = devices[gpu_idx % devices.len()];
+        let programs = ec_gpu_gen::program!(device).unwrap();
+        let kern = SingleMultiexpKernel::<G1Affine>::create(programs, device, None)
+            .expect("Cannot initialize kernel!");
+
+        let a = [kern.multiexp_bound(bases, _coeffs, max_bits).unwrap()];
+
+        release_gpu(gpu_idx);
+
+        let res: &[C::Curve] = unsafe { std::mem::transmute(&a[..]) };
+        res[0]
+    }
+}
+
+
+#[cfg(feature = "cuda")]
+pub fn gpu_multiexp_bound_and_fft<C: CurveAffine>(
+    coeffs: &mut [C::Scalar],
+    bases: &[C],
+    max_bits: usize,
+    omega: &C::Scalar,
+    divisor: &C::Scalar,
+    log_n: u32,
+) -> C::Curve {
+    use crate::plonk::{GPU_COND_VAR, GPU_LOCK};
+    use ec_gpu_gen::{
+        fft::FftKernel, multiexp::SingleMultiexpKernel, rust_gpu_tools::Device, threadpool::Worker,
+    };
+    use group::Curve;
+    use halo2curves::bn256::{Fr, G1Affine};
+
+    let gpu_idx = acquire_gpu();
+    let _coeffs: &mut [Fr] = unsafe { std::mem::transmute(coeffs) };
+    let bases: &[G1Affine] = unsafe { std::mem::transmute(bases) };
+    let omega: &Fr = unsafe { std::mem::transmute(omega) };
+    let divisor: &Fr = unsafe { std::mem::transmute(divisor) };
+
+    let devices = Device::all();
+    let device = devices[gpu_idx % devices.len()];
+    let programs = ec_gpu_gen::program!(device).unwrap();
+    let kern = SingleMultiexpKernel::<G1Affine>::create(programs, device, None)
+        .expect("Cannot initialize kernel!");
+
+    let a = [kern
+        .multiexp_bound_and_ifft(bases, _coeffs, max_bits, omega, divisor, log_n)
+        .unwrap()];
+    release_gpu(gpu_idx);
+
+    let res: &[C::Curve] = unsafe { std::mem::transmute(&a[..]) };
+
+    res[0]
+}
+
 /// Performs a multi-exponentiation operation.
 ///
 /// This function will panic if coeffs and bases have a different length.
@@ -180,6 +328,36 @@ pub fn best_multiexp<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Cu
     res
 }
 
+#[cfg(feature = "cuda")]
+pub fn gpu_fft<G: Group>(a: &mut [G], omega: G::Scalar, log_n: u32) {
+    use crate::plonk::{GPU_COND_VAR, GPU_LOCK, N_GPU};
+    use ec_gpu_gen::fft::{FftKernel, SingleFftKernel};
+    use ec_gpu_gen::rust_gpu_tools::Device;
+    use halo2curves::bn256::Fr;
+
+    let gpu_idx = acquire_gpu();
+
+    let devices = Device::all();
+    let device = devices[gpu_idx % devices.len()];
+    let program = ec_gpu_gen::program!(device).unwrap();
+    let mut kern = SingleFftKernel::<Fr>::create(program, None).expect("Cannot initialize kernel!");
+    let a: &mut [Fr] = unsafe { std::mem::transmute(a) };
+    let omega: &Fr = unsafe { std::mem::transmute(&omega) };
+    kern.radix_fft(a, omega, log_n).expect("GPU FFT failed!");
+
+    release_gpu(gpu_idx);
+}
+
+pub fn best_fft<G: Group>(a: &mut [G], omega: G::Scalar, log_n: u32) {
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "cuda")]{
+            return gpu_fft(a, omega, log_n);
+        } else {
+            return best_fft_cpu(a, omega, log_n);
+        }
+    }
+}
+
 /// Performs a radix-$2$ Fast-Fourier Transformation (FFT) on a vector of size
 /// $n = 2^k$, when provided `log_n` = $k$ and an element of multiplicative
 /// order $n$ called `omega` ($\omega$). The result is that the vector `a`, when
@@ -190,7 +368,7 @@ pub fn best_multiexp<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Cu
 /// by $n$.
 ///
 /// This will use multithreading if beneficial.
-pub fn best_fft<G: Group>(a: &mut [G], omega: G::Scalar, log_n: u32) {
+pub fn best_fft_cpu<G: Group>(a: &mut [G], omega: G::Scalar, log_n: u32) {
     fn bitreverse(mut n: usize, l: usize) -> usize {
         let mut r = 0;
         for _ in 0..l {

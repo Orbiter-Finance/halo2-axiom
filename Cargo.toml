@@ -2,7 +2,7 @@
 members = [
     "halo2",
     "halo2_proofs",
-    "icicle",
+    # "icicle",
     "primitives/poseidon"
 ]
 
@@ -19,3 +19,10 @@ incremental = false
 panic = "abort"
 # codegen-units = 1 is not optimal on my machine; always profile locally to determine best preferences
 # codegen-units = 1
+
+# [patch."https://github.com/Orbiter-Finance/halo2curves.git"]
+# halo2curves = { path = "../halo2curves"}
+
+# [patch."https://github.com/Orbiter-Finance/ec-gpu.git"]
+# ec-gpu = { path = "../ec-gpu/ec-gpu"}
+# ec-gpu-gen = { path = "../ec-gpu/ec-gpu-gen"}

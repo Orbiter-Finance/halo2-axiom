@@ -2,14 +2,14 @@ use std::fmt::Debug;
 
 use super::commitment::{KZGCommitmentScheme, ParamsKZG};
 use crate::{
-    arithmetic::{best_multiexp, parallelize, CurveAffine},
+    arithmetic::{best_multiexp, parallelize, CurveAffine, best_multiexp_gpu_cond},
     poly::commitment::MSM,
 };
 use group::{Curve, Group, GroupEncoding};
 use halo2curves::pairing::{Engine, MillerLoopResult, MultiMillerLoop};
 use halo2curves::serde::SerdeObject;
-use icicle_utils::curves::bn254_pse::MSMENTRY;
-use icicle_utils::test_bn254_pse::msm_bn254;
+// use icicle_utils::curves::bn254_pse::MSMENTRY;
+// use icicle_utils::test_bn254_pse::msm_bn254;
 
 /// A multiscalar multiplication in the polynomial commitment scheme
 #[derive(Clone, Default, Debug)]
@@ -69,10 +69,7 @@ impl<E: Engine + Debug> MSM<E::G1Affine> for MSMKZG<E> {
         use group::prime::PrimeCurveAffine;
         let mut bases = vec![E::G1Affine::identity(); self.scalars.len()];
         E::G1::batch_normalize(&self.bases, &mut bases);
-        println!("going msm");
-        let msm_calculate = MSMENTRY::<E>::new(&bases, &self.scalars);
-        // best_multiexp(&self.scalars, &bases)
-        msm_calculate.msm_bn254()
+        best_multiexp_gpu_cond(&self.scalars, &bases)
     }
 
     fn bases(&self) -> Vec<E::G1> {

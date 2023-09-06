@@ -1,5 +1,7 @@
+#[cfg(feature = "profile")]
+use ark_std::{end_timer, start_timer};
 use crate::arithmetic::{
-    best_fft, best_multiexp, g_to_lagrange, parallelize, CurveAffine, CurveExt, FieldExt, Group,
+    best_fft, best_multiexp, g_to_lagrange, parallelize, CurveAffine, CurveExt, FieldExt, Group, best_multiexp_gpu_cond,
 };
 use crate::helpers::SerdeCurveAffine;
 use crate::poly::commitment::{Blind, CommitmentScheme, Params, ParamsProver, ParamsVerifier, MSM};
@@ -9,8 +11,9 @@ use crate::SerdeFormat;
 use ff::{Field, PrimeField};
 use group::{prime::PrimeCurveAffine, Curve, Group as _};
 use halo2curves::pairing::Engine;
+// use icicle_utils::curves::bn254_pse::MSMENTRY;
 use rand_core::{OsRng, RngCore};
-use std::fmt::Debug;
+use std::fmt::{Debug, format};
 use std::marker::PhantomData;
 use std::ops::{Add, AddAssign, Mul, MulAssign};
 
@@ -276,7 +279,18 @@ where
     ) -> E::G1 {
         let size = poly.len();
         assert!(self.n() >= size as u64);
-        best_multiexp(poly, &self.g_lagrange[0..size])
+        let profile_info = format!("commit_lagrangee MSM Computation data len {}", poly.len());
+        #[cfg(feature = "profile")]
+        let commit_lagrange_timer = start_timer!(|| "commit_lagrangee MSM Computation");
+
+        use group::prime::PrimeCurveAffine;
+
+        let result = best_multiexp_gpu_cond(poly, &self.g_lagrange[0..size]);
+
+        // let result = best_multiexp(poly, &self.g_lagrange[0..size]);
+        #[cfg(feature = "profile")]
+        end_timer!(commit_lagrange_timer);
+        result
     }
 
     /// Writes params to a buffer.
@@ -316,7 +330,8 @@ where
     fn commit(&self, poly: &Polynomial<E::Scalar, Coeff>, _: Blind<E::Scalar>) -> E::G1 {
         let size = poly.len();
         assert!(self.n() >= size as u64);
-        best_multiexp(poly, &self.g[0..size])
+        // best_multiexp(poly, &self.g[0..size])
+        best_multiexp_gpu_cond(poly, &self.g[0..size])
     }
 
     fn get_g(&self) -> &[E::G1Affine] {

@@ -13,6 +13,7 @@ use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 use std::time::Instant;
 use std::{collections::HashMap, iter, mem, sync::atomic::Ordering};
+use std::sync::{Condvar, Mutex};
 
 use super::{
     circuit::{
@@ -44,6 +45,26 @@ use crate::{
     transcript::{EncodedChallenge, TranscriptWrite},
 };
 use group::prime::PrimeCurveAffine;
+
+lazy_static! {
+    pub static ref N_GPU: usize = usize::from_str_radix(
+        &std::env::var("HALO2_PROOFS_N_GPU").unwrap_or({
+            #[cfg(feature = "cuda")]
+            {
+                ec_gpu_gen::rust_gpu_tools::Device::all().len().to_string()
+            }
+            #[cfg(not(feature = "cuda"))]
+            {
+                "1".to_owned()
+            }
+        }),
+        10
+    )
+    .unwrap();
+    pub static ref GPU_LOCK: Mutex<Vec<usize>> =
+        Mutex::new(Vec::from_iter((0..*N_GPU).into_iter()));
+    pub static ref GPU_COND_VAR: Condvar = Condvar::new();
+}
 
 /// This creates a proof for the provided `circuit` when given the public
 /// parameters `params` and the proving key [`ProvingKey`] that was

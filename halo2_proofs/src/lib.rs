@@ -36,3 +36,6 @@ pub mod transcript;
 pub mod dev;
 mod helpers;
 pub use helpers::SerdeFormat;
+
+#[macro_use]
+extern crate lazy_static;
