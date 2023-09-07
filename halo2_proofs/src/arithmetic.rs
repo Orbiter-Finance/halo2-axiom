@@ -136,7 +136,6 @@ pub fn best_multiexp_gpu_cond<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C])
     } else {
         cfg_if::cfg_if! {
             if #[cfg(feature = "cuda")] {
-                println!("CUDA====CUDA");
                 gpu_multiexp(coeffs, bases)
             } else {
                 best_multiexp(coeffs, bases)
