@@ -145,6 +145,28 @@ pub fn best_multiexp_gpu_cond<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C])
 }
 
 #[cfg(feature = "cuda")]
+pub fn gpu_ifft<G: Group>(a: &mut [G], omega: G::Scalar, log_n: u32, divisor: G::Scalar) {
+    use crate::plonk::{GPU_COND_VAR, GPU_LOCK, N_GPU};
+    use ec_gpu_gen::fft::{FftKernel, SingleFftKernel};
+    use ec_gpu_gen::rust_gpu_tools::Device;
+    use halo2curves::bn256::Fr;
+
+    let gpu_idx = acquire_gpu();
+
+    let devices = Device::all();
+    let device = devices[gpu_idx % devices.len()];
+    let program = ec_gpu_gen::program!(device).unwrap();
+    let mut kern = SingleFftKernel::<Fr>::create(program, None).expect("Cannot initialize kernel!");
+    let a: &mut [Fr] = unsafe { std::mem::transmute(a) };
+    let omega: &Fr = unsafe { std::mem::transmute(&omega) };
+    let divisor: &Fr = unsafe { std::mem::transmute(&divisor) };
+    kern.radix_ifft(a, omega, divisor, log_n)
+        .expect("GPU FFT failed!");
+
+    release_gpu(gpu_idx);
+}
+
+#[cfg(feature = "cuda")]
 pub fn gpu_multiexp<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Curve {
     gpu_multiexp_bound(coeffs, bases, C::Scalar::NUM_BITS as usize)
 }

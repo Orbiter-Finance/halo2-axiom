@@ -647,6 +647,11 @@ impl<G: Group> EvaluationDomain<G> {
         assert_eq!(a.values.len(), 1 << self.k);
 
         // Perform inverse FFT to obtain the polynomial in coefficient form
+
+        #[cfg(feature = "cuda")]
+        // Perform inverse FFT to obtain the polynomial in coefficient form
+        crate::arithmetic::gpu_ifft(&mut a.values, self.omega_inv, self.k, self.ifft_divisor);
+        #[cfg(not(feature = "cuda"))]
         self.ifft(&mut a.values, self.omega_inv, self.k, self.ifft_divisor);
 
         Polynomial {
@@ -777,13 +782,18 @@ impl<G: Group> EvaluationDomain<G> {
     }
 
     fn ifft(&self, a: &mut Vec<G::Scalar>, omega_inv: G::Scalar, log_n: u32, divisor: G::Scalar) {
-        self.fft_inner(a, omega_inv, log_n, true);
-        parallelize(a, |a, _| {
-            for a in a {
-                // Finish iFFT
-                a.group_scale(&divisor);
-            }
-        });
+        #[cfg(not(feature = "cuda"))] {
+            self.fft_inner(a, omega_inv, log_n, true);
+            parallelize(a, |a, _| {
+                for a in a {
+                    // Finish iFFT
+                    a.group_scale(&divisor);
+                }
+            });
+        }
+        
+        #[cfg(feature = "cuda")]
+        crate::arithmetic::gpu_ifft(a, omega_inv, log_n, divisor)
     }
 
     fn fft_inner(&self, a: &mut Vec<G::Scalar>, omega: G::Scalar, log_n: u32, inverse: bool) {
