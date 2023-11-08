@@ -279,17 +279,12 @@ where
     ) -> E::G1 {
         let size = poly.len();
         assert!(self.n() >= size as u64);
-        let profile_info = format!("commit_lagrangee MSM Computation data len {}", poly.len());
-        #[cfg(feature = "profile")]
-        let commit_lagrange_timer = start_timer!(|| "commit_lagrangee MSM Computation");
 
         use group::prime::PrimeCurveAffine;
 
         let result = best_multiexp_gpu_cond(poly, &self.g_lagrange[0..size]);
 
         // let result = best_multiexp(poly, &self.g_lagrange[0..size]);
-        #[cfg(feature = "profile")]
-        end_timer!(commit_lagrange_timer);
         result
     }
 

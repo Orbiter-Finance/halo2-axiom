@@ -424,8 +424,7 @@ where
     let input_expression = &input_expression[0..usable_rows];
 
     // Sort input lookup expression values
-    #[cfg(feature = "profile")]
-    let input_time = start_timer!(|| "permute_par input hashmap (cpu par)");
+   
     // count input_expression unique values using a HashMap, using rayon parallel fold+reduce
     let capacity = usable_rows / num_threads + 1;
     let input_uniques: HashMap<C::Scalar, usize> = input_expression
@@ -444,11 +443,7 @@ where
             m1
         })
         .unwrap();
-    #[cfg(feature = "profile")]
-    end_timer!(input_time);
 
-    #[cfg(feature = "profile")]
-    let timer = start_timer!(|| "permute_par input unique ranges (cpu par)");
     let input_unique_ranges = input_uniques
         .par_iter()
         .fold(
@@ -472,22 +467,11 @@ where
             [r1, r2].concat()
         })
         .unwrap();
-    #[cfg(feature = "profile")]
-    end_timer!(timer);
 
-    #[cfg(feature = "profile")]
-    let to_vec_time = start_timer!(|| "to_vec");
     let mut sorted_table_coeffs = table_expression[0..usable_rows].to_vec();
-    #[cfg(feature = "profile")]
-    end_timer!(to_vec_time);
-    #[cfg(feature = "profile")]
-    let sort_table_time = start_timer!(|| "permute_par sort table");
+  
     sorted_table_coeffs.par_sort();
-    #[cfg(feature = "profile")]
-    end_timer!(sort_table_time);
 
-    #[cfg(feature = "profile")]
-    let timer = start_timer!(|| "leftover table coeffs (cpu par)");
     let leftover_table_coeffs: Vec<C::Scalar> = sorted_table_coeffs
         .par_iter()
         .enumerate()
@@ -496,8 +480,6 @@ where
                 .then_some(*coeff)
         })
         .collect();
-    #[cfg(feature = "profile")]
-    end_timer!(timer);
 
     let (mut permuted_input_expression, mut permuted_table_coeffs): (Vec<_>, Vec<_>) =
         input_unique_ranges
